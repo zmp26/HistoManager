@@ -1,3 +1,10 @@
+/*
+	Usage:
+	.L HistoManager.cpp+				(this loads as a shared library)
+	HistoManager *histomanager = new HistoManager(ExistingTFilePointer);
+	histomanager->
+*/
+
 #include "HistoManager.h"
 #include "TH1F.h"
 #include "TH1D.h"
@@ -7,11 +14,13 @@
 #include "TProfile2D.h"
 #include "TROOT.h"
 #include "TDirectory.h"
+#include "TObjString.h"
 
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 HistoManager::HistoManager(TFile* outputfile) : m_outputFile(outputfile){
 	if(m_outputFile){
@@ -65,14 +74,16 @@ bool HistoManager::loadHistoConfig(const TString& configFilePath){
 		}
 
 		istringstream iss(line);
+		string directory;
 		string type;
-		if(!(iss >> type)){
+		if(!(iss >> directory >> type)){
 			cerr << "Error: Could not read histogram type from line: " << line << endl;
 			continue;
 		}
 
 		if(type == "TH1F" || type == "TH1D" || type == "TProfile"){
 			HistoConfig1D config;
+			config.directory = directory;
 			config.type = type;
 			if(iss >> config.name >> config.title >> config.nbinsx >> config.xmin >> config.xmax){
 				addHisto1D(config);
@@ -81,6 +92,7 @@ bool HistoManager::loadHistoConfig(const TString& configFilePath){
 			}
 		} else if(type == "TH2F" || type == "TH2D" || type == "TProfile2D"){
 			HistoConfig2D config;
+			config.directory = directory;
 			config.type = type;
 			if(iss >> config.name >> config.title >> config.nbinsx >> config.xmin >> config.xmax >> config.nbinsy >> config.ymin >> config.ymax){
 				addHisto2D(config);
@@ -96,7 +108,7 @@ bool HistoManager::loadHistoConfig(const TString& configFilePath){
 	return true;
 }
 
-void HistoManager::addHisto1D(const TString& name, const TString& title, Int_t nbinsx, Double_t xmin, Double_t xmax, const TString& type){
+void HistoManager::addHisto1D(const TString& name, const TString& title, Int_t nbinsx, Double_t xmin, Double_t xmax, const TString& type, const TString& directory){
 	HistoConfig1D config;
 	config.name = name;
 	config.title = title;
@@ -104,17 +116,30 @@ void HistoManager::addHisto1D(const TString& name, const TString& title, Int_t n
 	config.xmin = xmin;
 	config.xmax = xmax;
 	config.type = type;
+	config.directory = directory;
 	addHisto1D(config);
 }
 
 void HistoManager::addHisto1D(const HistoConfig1D& config){
+	if(getHisto1D(config.name)){
+		cerr << "Warning: Histogram " << config.name << " already exists. Skipping." << endl;
+		return;
+	}
 	TH1* h = createHisto1D(config);
 	if(h){
-		m_h1DTable.Add(h);
+		TDirectory* dir = getOrCreateDirectory(config.directory);
+		dir->cd();
+		h->SetDirectory(dir);
+		if(config.type == "TProfile"){
+			m_profile1DTable.Add(h);
+		} else {
+			m_h1DTable.Add(h);
+		}
+		if(m_outputFile) m_outputFile->cd();
 	}
 }
 
-void HistoManager::addHisto2D(const TString& name, const TString& title, Int_t nbinsx, Double_t xmin, Double_t xmax, Int_t nbinsy, Double_t ymin, Double_t ymax, const TString& type){
+void HistoManager::addHisto2D(const TString& name, const TString& title, Int_t nbinsx, Double_t xmin, Double_t xmax, Int_t nbinsy, Double_t ymin, Double_t ymax, const TString& type, const TString& directory){
 	HistoConfig2D config;
 	config.name = name;
 	config.title = title;
@@ -125,13 +150,26 @@ void HistoManager::addHisto2D(const TString& name, const TString& title, Int_t n
 	config.ymin = ymin;
 	config.ymax = ymax;
 	config.type = type;
+	config.directory = directory;
 	addHisto2D(config);
 }
 
 void HistoManager::addHisto2D(const HistoConfig2D& config){
+	if(getHisto2D(config.name)){
+		cerr << "Warning: Histogram " << config.name << " already exists. Skipping." << endl;
+		return;
+	}
 	TH2* h = createHisto2D(config);
 	if(h){
-		m_h2DTable.Add(h);
+		TDirectory* dir = getOrCreateDirectory(config.directory);
+		dir->cd();
+		h->SetDirectory(dir);
+		if(config.type == "TProfile2D"){
+			m_profile2DTable.Add(h);
+		} else {
+			m_h2DTable.Add(h);
+		}
+		if(m_outputFile) m_outputFile->cd();
 	}
 }
 
@@ -158,25 +196,49 @@ void HistoManager::WriteAll(bool writeFileToDiskAutomatically){
 		TIter next1D(m_h1DTable.MakeIterator());
 		TObject *obj1D;
 		while((obj1D = next1D())){
-			obj1D->Write();
+			TH1* h = dynamic_cast<TH1*>(obj1D);
+			if(h){
+				TDirectory* dir = h->GetDirectory();
+				if(!dir) dir = m_outputFile;
+				dir->cd();
+				h->Write();
+			}
 		}
 
 		TIter next2D(m_h2DTable.MakeIterator());
 		TObject *obj2D;
 		while((obj2D = next2D())){
-			obj2D->Write();
+			TH2* h = dynamic_cast<TH2*>(obj2D);
+			if(h){
+				TDirectory* dir = h->GetDirectory();
+				if(!dir) dir = m_outputFile;
+				dir->cd();
+				h->Write();
+			}
 		}
 
 		TIter nextP1D(m_profile1DTable.MakeIterator());
 		TObject *objP1D;
 		while((objP1D = nextP1D())){
-			objP1D->Write();
+			TProfile* p = dynamic_cast<TProfile*>(objP1D);
+			if(p){
+				TDirectory* dir = p->GetDirectory();
+				if(!dir) dir = m_outputFile;
+				dir->cd();
+				p->Write();
+			}
 		}
 
 		TIter nextP2D(m_profile2DTable.MakeIterator());
 		TObject *objP2D;
 		while((objP2D = nextP2D())){
-			objP2D->Write();
+			TProfile2D* p = dynamic_cast<TProfile2D*>(objP2D);
+			if(p){
+				TDirectory* dir = p->GetDirectory();
+				if(!dir) dir = m_outputFile;
+				dir->cd();
+				p->Write();
+			}
 		}
 
 		if(writeFileToDiskAutomatically) m_outputFile->Write();
@@ -256,4 +318,38 @@ TH2* HistoManager::createHisto2D(const HistoConfig2D& config){
 		cerr << "Did you forget to add functionality for " << config.type.Data() << " in HistoManager class?" << endl;
 	}
 	return histo;
+}
+
+TDirectory* HistoManager::getOrCreateDirectory(const TString& path){
+	if(!m_outputFile){
+		cerr << "Warning: Output file not set. Cannot create directory." << endl;
+		return gDirectory;
+	}
+
+	if(path.IsNull() || path.IsWhitespace()){
+		return m_outputFile;
+	}
+
+	TDirectory* currentDir = m_outputFile;
+	TObjArray* parts = path.Tokenize("/");
+
+	TIter next(parts);
+
+	TObjString* obj;
+	while((obj = (TObjString*)next())){
+		TString part = obj->GetString();
+		TDirectory *subdir = (TDirectory*) currentDir->Get(part);
+		if(!subdir){
+			subdir = currentDir->mkdir(part);
+			if(!subdir){
+				cerr << "Error creating directory: " << path << ". Defaulting to current directory." << endl;
+				delete parts;
+				return gDirectory;
+			}
+		}
+		currentDir = subdir;
+	}
+
+	delete parts;
+	return currentDir;
 }

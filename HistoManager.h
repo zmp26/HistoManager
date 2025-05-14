@@ -21,6 +21,7 @@ struct HistoConfig1D{
 	TString title;
 	Int_t nbinsx;
 	Double_t xmin, xmax;
+	TString directory;
 };
 
 struct HistoConfig2D{
@@ -32,6 +33,7 @@ struct HistoConfig2D{
 	Double_t xmin, xmax;
 	Int_t nbinsy;
 	Double_t ymin, ymax;
+	TString directory;
 };
 
 class HistoManager {
@@ -42,10 +44,10 @@ public:
 
 	bool loadHistoConfig(const TString& configFilePath);
 
-	void addHisto1D(const TString& name, const TString& title, Int_t nbinsX, Double_t xmin, Double_t xmax, const TString& type);
+	void addHisto1D(const TString& name, const TString& title, Int_t nbinsX, Double_t xmin, Double_t xmax, const TString& type, const TString& directory);
 	void addHisto1D(const HistoConfig1D& config);
 
-	void addHisto2D(const TString& name, const TString& title, Int_t nbinsX, Double_t xmin, Double_t xmax, Int_t nbinsY, Double_t ymin, Double_t ymax, const TString& type);
+	void addHisto2D(const TString& name, const TString& title, Int_t nbinsX, Double_t xmin, Double_t xmax, Int_t nbinsY, Double_t ymin, Double_t ymax, const TString& type, const TString& directory);
 	void addHisto2D(const HistoConfig2D& config);
 
 	TH1* getHisto1D(const TString& name) const;
@@ -53,7 +55,7 @@ public:
 	TProfile* getProfile1D(const TString& name) const;
 	TProfile2D* getProfile2D(const TString& name) const;
 
-	void WriteAll(bool writeFileToDiskAutomatically);
+	void WriteAll(bool writeFileToDiskAutomatically=true);
 	void Write(const TString& name);
 	void Write(const TString& name, TDirectory *tdir);
 
@@ -67,11 +69,7 @@ protected:
 private:
 	TH1* createHisto1D(const HistoConfig1D& config);
 	TH2* createHisto2D(const HistoConfig2D& config);
+	TDirectory* getOrCreateDirectory(const TString& path);
 };
-
-
-
-
-
 
 #endif
