@@ -1,0 +1,6 @@
+TH1D testName1 testTitle2 256 0 255
+TH1F testName2 testTitle2 256 0 255
+TH2D testName3 testTitle3 256 0 255 256 0 255
+TH2F testName4 testTitle4 256 0 255 256 0 255
+TProfile testName5 testTitle5 256 0 255
+TProfile2D testName6 testTitle6 256 0 255 256 0 255

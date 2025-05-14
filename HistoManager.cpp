@@ -15,12 +15,14 @@
 #include "TROOT.h"
 #include "TDirectory.h"
 #include "TObjString.h"
+#include "TObject.h"
 
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 HistoManager::HistoManager(TFile* outputfile) : m_outputFile(outputfile){
 	if(m_outputFile){
@@ -189,62 +191,115 @@ TProfile2D* HistoManager::getProfile2D(const TString& name) const {
 	return dynamic_cast<TProfile2D*>(m_profile2DTable.FindObject(name.Data()));
 }
 
+// void HistoManager::WriteAll(bool writeFileToDiskAutomatically){
+// 	if(m_outputFile){
+// 		m_outputFile->cd();
+
+// 		std::vector<TObject*> sorted1D;
+
+// 		TIter next1D(m_h1DTable.MakeIterator());
+// 		TObject *obj1D;
+// 		while((obj1D = next1D())){
+// 			TH1* h = dynamic_cast<TH1*>(obj1D);
+// 			if(h){
+// 				TDirectory* dir = h->GetDirectory();
+// 				if(!dir) dir = m_outputFile;
+// 				dir->cd();
+// 				h->Write();
+// 			}
+// 		}
+
+// 		TIter next2D(m_h2DTable.MakeIterator());
+// 		TObject *obj2D;
+// 		while((obj2D = next2D())){
+// 			TH2* h = dynamic_cast<TH2*>(obj2D);
+// 			if(h){
+// 				TDirectory* dir = h->GetDirectory();
+// 				if(!dir) dir = m_outputFile;
+// 				dir->cd();
+// 				h->Write();
+// 			}
+// 		}
+
+// 		TIter nextP1D(m_profile1DTable.MakeIterator());
+// 		TObject *objP1D;
+// 		while((objP1D = nextP1D())){
+// 			TProfile* p = dynamic_cast<TProfile*>(objP1D);
+// 			if(p){
+// 				TDirectory* dir = p->GetDirectory();
+// 				if(!dir) dir = m_outputFile;
+// 				dir->cd();
+// 				p->Write();
+// 			}
+// 		}
+
+// 		TIter nextP2D(m_profile2DTable.MakeIterator());
+// 		TObject *objP2D;
+// 		while((objP2D = nextP2D())){
+// 			TProfile2D* p = dynamic_cast<TProfile2D*>(objP2D);
+// 			if(p){
+// 				TDirectory* dir = p->GetDirectory();
+// 				if(!dir) dir = m_outputFile;
+// 				dir->cd();
+// 				p->Write();
+// 			}
+// 		}
+
+// 		if(writeFileToDiskAutomatically) m_outputFile->Write();
+// 	} else {
+// 		cerr << "Warning: Output file not set. Histograms will not be written to disk." << endl;
+// 	}
+// }
+
 void HistoManager::WriteAll(bool writeFileToDiskAutomatically){
-	if(m_outputFile){
-		m_outputFile->cd();
-
-		TIter next1D(m_h1DTable.MakeIterator());
-		TObject *obj1D;
-		while((obj1D = next1D())){
-			TH1* h = dynamic_cast<TH1*>(obj1D);
-			if(h){
-				TDirectory* dir = h->GetDirectory();
-				if(!dir) dir = m_outputFile;
-				dir->cd();
-				h->Write();
-			}
-		}
-
-		TIter next2D(m_h2DTable.MakeIterator());
-		TObject *obj2D;
-		while((obj2D = next2D())){
-			TH2* h = dynamic_cast<TH2*>(obj2D);
-			if(h){
-				TDirectory* dir = h->GetDirectory();
-				if(!dir) dir = m_outputFile;
-				dir->cd();
-				h->Write();
-			}
-		}
-
-		TIter nextP1D(m_profile1DTable.MakeIterator());
-		TObject *objP1D;
-		while((objP1D = nextP1D())){
-			TProfile* p = dynamic_cast<TProfile*>(objP1D);
-			if(p){
-				TDirectory* dir = p->GetDirectory();
-				if(!dir) dir = m_outputFile;
-				dir->cd();
-				p->Write();
-			}
-		}
-
-		TIter nextP2D(m_profile2DTable.MakeIterator());
-		TObject *objP2D;
-		while((objP2D = nextP2D())){
-			TProfile2D* p = dynamic_cast<TProfile2D*>(objP2D);
-			if(p){
-				TDirectory* dir = p->GetDirectory();
-				if(!dir) dir = m_outputFile;
-				dir->cd();
-				p->Write();
-			}
-		}
-
-		if(writeFileToDiskAutomatically) m_outputFile->Write();
-	} else {
-		cerr << "Warning: Output file not set. Histograms will not be written to disk." << endl;
+	if(!m_outputFile){
+		cerr << "Warning: output file not set. Histograms will not be written to disk." << endl;
+		return;
 	}
+
+	std::map<TDirectory*, std::vector<TObject*>> dirMap;
+
+	//lambda to gather histograms from any TList into the map
+	auto collectHistos = [&](THashTable& table){
+		TIter it(table.MakeIterator());
+		TObject* obj;
+		while((obj = it())){
+			TDirectory* dir = nullptr;
+
+			//determine the directroy from the actual histogram type
+			if(auto h1 = dynamic_cast<TH1*>(obj)){
+				dir = h1->GetDirectory();
+			} else if(auto h2 = dynamic_cast<TH2*>(obj)){
+				dir = h2->GetDirectory();
+			} else if(auto p1 = dynamic_cast<TProfile*>(obj)){
+				dir = p1->GetDirectory();
+			} else if(auto p2 = dynamic_cast<TProfile2D*>(obj)){
+				dir = p2->GetDirectory();
+			}
+
+			if(!dir) dir = m_outputFile;//default to root file
+			dirMap[dir].push_back(obj);
+		}
+	};
+
+	//collect all histograms from all types
+	collectHistos(m_h1DTable);
+	collectHistos(m_h2DTable);
+	collectHistos(m_profile1DTable);
+	collectHistos(m_profile2DTable);
+
+	//sort and write histograms in each directory
+	for(auto& [dir,histos] : dirMap){
+		std::sort(histos.begin(),histos.end(),[](TObject* a, TObject* b){
+			return (TString(a->GetName()) < TString(b->GetName()));
+		});
+		dir->cd();
+		for(auto* h : histos){
+			h->Write();
+		}
+	}
+
+	if(writeFileToDiskAutomatically){ m_outputFile->Write(); } else { cout << "Histos written to file in memory but file not written to disk yet!" << endl; }
 }
 
 void HistoManager::Write(const TString& name){
