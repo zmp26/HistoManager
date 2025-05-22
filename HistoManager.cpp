@@ -8,8 +8,13 @@
 #include "HistoManager.h"
 #include "TH1F.h"
 #include "TH1D.h"
+#include "TH1I.h"
 #include "TH2F.h"
 #include "TH2D.h"
+#include "TH2I.h"
+#include "TH3F.h"
+#include "TH3D.h"
+#include "TH3I.h"
 #include "TProfile.h"
 #include "TProfile2D.h"
 #include "TROOT.h"
@@ -83,7 +88,7 @@ bool HistoManager::loadHistoConfig(const TString& configFilePath){
 			continue;
 		}
 
-		if(type == "TH1F" || type == "TH1D" || type == "TProfile"){
+		if(type == "TH1F" || type == "TH1D" || type == "TH1I" || type == "TProfile"){
 			HistoConfig1D config;
 			config.directory = directory;
 			config.type = type;
@@ -92,7 +97,7 @@ bool HistoManager::loadHistoConfig(const TString& configFilePath){
 			} else {
 				cerr << "Error: Invalid 1D Histogram configuration: " << line << endl;
 			}
-		} else if(type == "TH2F" || type == "TH2D" || type == "TProfile2D"){
+		} else if(type == "TH2F" || type == "TH2D" || type == "TH1I" || type == "TProfile2D"){
 			HistoConfig2D config;
 			config.directory = directory;
 			config.type = type;
@@ -100,6 +105,25 @@ bool HistoManager::loadHistoConfig(const TString& configFilePath){
 				addHisto2D(config);
 			} else {
 				cerr << "Error: Invalid 2D Histogram configuration: " << line << endl;
+			}
+		} else if(type == "TH3F" || type == "TH3D" || type == "TH3I"){
+			HistoConfig3D config;
+			config.directory = directory;
+			config.type = type;
+			if(iss >> config.name >> config.title >> config.nbinsx >> config.xmin >> config.xmax >> config.nbinsy >> config.ymin >> config.ymax >> config.nbinsz >> config.zmin >> config.zmax){
+				addHisto3D(config);
+			} else {
+				cerr << "Error: Invalid 3D Histogram configuration: " << line << endl;
+			}
+		} else if(type == "TH2Poly"){
+			HistoConfig2DPoly config;
+			config.directory = directory;
+			config.type = type;
+			if(iss >> config.name >> config.title) {
+				addHisto2DPoly(config);
+				//can parse polygons here in the future
+			} else {
+				cerr << "Error: Invalid TH2Poly Histogram configuration: " << line << endl;
 			}
 		} else {
 			cerr << "Error: Unknown histogram type: " << type << " in line: " << line << endl;
@@ -175,6 +199,64 @@ void HistoManager::addHisto2D(const HistoConfig2D& config){
 	}
 }
 
+void HistoManager::addHisto2DPoly(const TString& name, const TString& title, const TString& directory){
+	HistoConfig2DPoly config;
+	config.name = name;
+	config.title = title;
+	config.type = "TH2Poly";
+	config.directory = directory;
+	addHisto2DPoly(config);
+}
+
+void HistoManager::addHisto2DPoly(const HistoConfig2DPoly& config){
+	if(getHisto2DPoly(config.name)){
+		cerr << "Warning: TH2Poly " << config.name << " already exists. Skipping." << endl;
+		return;
+	}
+
+	TH2Poly* h = new TH2Poly(config.name, config.title, 0, 0, 0, 0);
+	TDirectory* dir = getOrCreateDirectory(config.directory);
+	dir->cd();
+	h->SetDirectory(dir);
+	m_h2DPolyTable.Add(h);
+	if(m_outputFile) m_outputFile->cd();
+}
+
+void HistoManager::addHisto3D(const TString& name, const TString& title, Int_t nbinsx, Double_t xmin, Double_t xmax, Int_t nbinsy, Double_t ymin, Double_t ymax, Int_t nbinsz, Double_t zmin, Double_t zmax, const TString& type, const TString& directory){
+	HistoConfig3D config;
+	config.name = name;
+	config.title = title;
+	config.nbinsx = nbinsx;
+	config.xmin = xmin;
+	config.xmax = xmax;
+	config.nbinsy = nbinsy;
+	config.ymin = ymin;
+	config.ymax = ymax;
+	config.nbinsz = nbinsz;
+	config.zmin = zmin;
+	config.zmax = zmax;
+	config.type = type;
+	config.directory = directory;
+	addHisto3D(config);
+}
+
+void HistoManager::addHisto3D(const HistoConfig3D& config){
+	if(getHisto3D(config.name)){
+		cerr << "Warning: Histogram " << config.name << " already exists. Skipping." << endl;
+		return;
+	}
+	TH3* h = createHisto3D(config);
+	if(h){
+		TDirectory* dir = getOrCreateDirectory(config.directory);
+		dir->cd();
+		h->SetDirectory(dir);
+		m_h3DTable.Add(h);
+		if(m_outputFile) m_outputFile->cd();
+	}
+}
+
+
+
 TH1* HistoManager::getHisto1D(const TString& name) const{
 	return dynamic_cast<TH1*>(m_h1DTable.FindObject(name.Data()));
 }
@@ -183,12 +265,20 @@ TH2* HistoManager::getHisto2D(const TString& name) const{
 	return dynamic_cast<TH2*>(m_h2DTable.FindObject(name.Data()));
 }
 
+TH3* HistoManager::getHisto3D(const TString& name) const{
+	return dynamic_cast<TH3*>(m_h3DTable.FindObject(name.Data()));
+}
+
 TProfile* HistoManager::getProfile1D(const TString& name) const {
 	return dynamic_cast<TProfile*>(m_profile1DTable.FindObject(name.Data()));
 }
 
 TProfile2D* HistoManager::getProfile2D(const TString& name) const {
 	return dynamic_cast<TProfile2D*>(m_profile2DTable.FindObject(name.Data()));
+}
+
+TH2Poly* HistoManager::getHisto2DPoly(const TString& name) const {
+	return dynamic_cast<TH2Poly*>(m_h2DPolyTable.FindObject(name.Data()));
 }
 
 // void HistoManager::WriteAll(bool writeFileToDiskAutomatically){
@@ -271,10 +361,14 @@ void HistoManager::WriteAll(bool writeFileToDiskAutomatically){
 				dir = h1->GetDirectory();
 			} else if(auto h2 = dynamic_cast<TH2*>(obj)){
 				dir = h2->GetDirectory();
+			} else if(auto h3 = dynamic_cast<TH3*>(obj)){
+				dir = h3->GetDirectory();
 			} else if(auto p1 = dynamic_cast<TProfile*>(obj)){
 				dir = p1->GetDirectory();
 			} else if(auto p2 = dynamic_cast<TProfile2D*>(obj)){
 				dir = p2->GetDirectory();
+			} else if(auto h2poly = dynamic_cast<TH2Poly*>(obj)){
+				dir = h2poly->GetDirectory();
 			}
 
 			if(!dir) dir = m_outputFile;//default to root file
@@ -285,8 +379,10 @@ void HistoManager::WriteAll(bool writeFileToDiskAutomatically){
 	//collect all histograms from all types
 	collectHistos(m_h1DTable);
 	collectHistos(m_h2DTable);
+	collectHistos(m_h3DTable);
 	collectHistos(m_profile1DTable);
 	collectHistos(m_profile2DTable);
+	collectHistos(m_h2DPolyTable);
 
 	//sort and write histograms in each directory
 	for(auto& [dir,histos] : dirMap){
@@ -328,6 +424,13 @@ void HistoManager::Write(const TString& name, TDirectory *tdir){
 		return;
 	}
 
+	obj = m_h3DTable.FindObject(name.Data());
+	if(obj){
+		tdir->cd();
+		obj->Write();
+		return;
+	}
+
 	obj = m_profile1DTable.FindObject(name.Data());
 	if(obj){
 		tdir->cd();
@@ -336,6 +439,13 @@ void HistoManager::Write(const TString& name, TDirectory *tdir){
 	}
 
 	obj = m_profile2DTable.FindObject(name.Data());
+	if(obj){
+		tdir->cd();
+		obj->Write();
+		return;
+	}
+
+	obj = m_h2DPolyTable.FindObject(name.Data());
 	if(obj){
 		tdir->cd();
 		obj->Write();
@@ -351,6 +461,8 @@ TH1* HistoManager::createHisto1D(const HistoConfig1D& config){
 		histo = new TH1F(config.name, config.title, config.nbinsx, config.xmin, config.xmax);
 	} else if(config.type == "TH1D"){
 		histo = new TH1D(config.name, config.title, config.nbinsx, config.xmin, config.xmax);
+	} else if(config.type == "TH1I") {
+		histo = new TH1I(config.name, config.title, config.nbinsx, config.xmin, config.xmax);
 	} else if(config.type == "TProfile"){
 		histo = new TProfile(config.name, config.title, config.nbinsx, config.xmin, config.xmax);
 	} else {
@@ -366,10 +478,27 @@ TH2* HistoManager::createHisto2D(const HistoConfig2D& config){
 		histo = new TH2F(config.name, config.title, config.nbinsx, config.xmin, config.xmax, config.nbinsy, config.ymin, config.ymax);
 	} else if(config.type == "TH2D"){
 		histo = new TH2D(config.name, config.title, config.nbinsx, config.xmin, config.xmax, config.nbinsy, config.ymin, config.ymax);
+	} else if(config.type == "TH2I"){
+		histo = new TH2I(config.name, config.title, config.nbinsx, config.xmin, config.xmax, config.nbinsy, config.ymin, config.ymax);
 	} else if(config.type == "TProfile2D"){
 		histo = new TProfile2D(config.name, config.title, config.nbinsx, config.xmin, config.xmax, config.nbinsy, config.ymin, config.ymax);
 	} else {
 		cerr << "Error: Unknown 2D histogram type: " << config.type.Data() << endl;
+		cerr << "Did you forget to add functionality for " << config.type.Data() << " in HistoManager class?" << endl;
+	}
+	return histo;
+}
+
+TH3* HistoManager::createHisto3D(const HistoConfig3D& config){
+	TH3* histo = nullptr;
+	if(config.type == "TH3F"){
+		histo = new TH3F(config.name, config.title, config.nbinsx, config.xmin, config.xmax, config.nbinsy, config.ymin, config.ymax, config.nbinsz, config.zmin, config.zmax);
+	} else if(config.type == "TH3D"){
+		histo = new TH3D(config.name, config.title, config.nbinsx, config.xmin, config.xmax, config.nbinsy, config.ymin, config.ymax, config.nbinsz, config.zmin, config.zmax);
+	} else if(config.type == "TH3I"){
+		histo = new TH3I(config.name, config.title, config.nbinsx, config.xmin, config.xmax, config.nbinsy, config.ymin, config.ymax, config.nbinsz, config.zmin, config.zmax);
+	} else {
+		cerr << "Error: Unknown 3D histogram type: " << config.type.Data() << endl;
 		cerr << "Did you forget to add functionality for " << config.type.Data() << " in HistoManager class?" << endl;
 	}
 	return histo;
