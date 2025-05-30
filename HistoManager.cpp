@@ -391,11 +391,11 @@ void HistoManager::WriteAll(bool writeFileToDiskAutomatically){
 		});
 		dir->cd();
 		for(auto* h : histos){
-			h->Write("kOverwrite");
+			h->Write("",TObject::kOverwrite);
 		}
 	}
 
-	if(writeFileToDiskAutomatically){ m_outputFile->Write("kOverwrite"); } else { cout << "Histos written to file in memory but file not written to disk yet!" << endl; }
+	if(writeFileToDiskAutomatically){ m_outputFile->Write("",TObject::kOverwrite); } else { cout << "Histos written to file in memory but file not written to disk yet!" << endl; }
 }
 
 void HistoManager::Write(const TString& name){
@@ -413,42 +413,42 @@ void HistoManager::Write(const TString& name, TDirectory *tdir){
 	obj = m_h1DTable.FindObject(name.Data());
 	if(obj){
 		tdir->cd();
-		obj->Write("kOverwrite");
+		obj->Write("",TObject::kOverwrite);
 		return;
 	}
 
 	obj = m_h2DTable.FindObject(name.Data());
 	if(obj){
 		tdir->cd();
-		obj->Write("kOverwrite");
+		obj->Write("",TObject::kOverwrite);
 		return;
 	}
 
 	obj = m_h3DTable.FindObject(name.Data());
 	if(obj){
 		tdir->cd();
-		obj->Write("kOverwrite");
+		obj->Write("",TObject::kOverwrite);
 		return;
 	}
 
 	obj = m_profile1DTable.FindObject(name.Data());
 	if(obj){
 		tdir->cd();
-		obj->Write("kOverwrite");
+		obj->Write("",TObject::kOverwrite);
 		return;
 	}
 
 	obj = m_profile2DTable.FindObject(name.Data());
 	if(obj){
 		tdir->cd();
-		obj->Write("kOverwrite");
+		obj->Write("",TObject::kOverwrite);
 		return;
 	}
 
 	obj = m_h2DPolyTable.FindObject(name.Data());
 	if(obj){
 		tdir->cd();
-		obj->Write("kOverwrite");
+		obj->Write("",TObject::kOverwrite);
 		return;
 	}
 
